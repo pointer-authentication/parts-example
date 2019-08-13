@@ -21,7 +21,7 @@ LINARO_GCC 	?= $(mkfile_dir)gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu
 # The Linaro sysroot to use
 SYSROOT 	?= $(mkfile_dir)sysroot-glibc-linaro-2.25-2018.05-aarch64-linux-gnu
 # The LLVM installation or build directory to use
-LLVM 		?= $(mkfile_dir)PARTS-llvm/build
+LLVM 		?= $(mkfile_dir)parts-build
 
 # Locate some binaryies
 LLVM_LINKER 	:= ${LLVM}/bin/llvm-link
@@ -134,7 +134,7 @@ LLC_FLAGS += -O=$(O_LEVEL)
 
 ifeq ($(USE_PAUTH), yes)
 ifeq ($(USE_BECFI), yes)
-	LLC_FLAGS += -parts-becfi
+	LLC_FLAGS += -parts-becfi=full
 endif
 ifeq ($(USE_FECFI), yes)
 	LLC_FLAGS += -parts-fecfi

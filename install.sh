@@ -8,11 +8,11 @@
 set -ue
 
 SCRIPT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-TAG="master"
+TAG="parts/master"
 
 REPODIR="${SCRIPT_ROOT}/PARTS-llvm"
-LLVM_INSTALL="${SCRIPT_ROOT}/llvm-install"
-BUILD_DIR="${LLVM_INSTALL}/build"
+LLVM_INSTALL="${SCRIPT_ROOT}/parts-install"
+BUILD_DIR="${SCRIPT_ROOT}/parts-build"
 LINARO_RELEASE_URL="https://releases.linaro.org/components/toolchain/binaries/7.3-2018.05/aarch64-linux-gnu/"
 LINARO_SYSROOT_FILENAME="sysroot-glibc-linaro-2.25-2018.05-aarch64-linux-gnu.tar.xz"
 LINARO_SYSROOT_URL="${LINARO_RELEASE_URL}/${LINARO_SYSROOT_FILENAME}"
@@ -68,19 +68,15 @@ compiler() {
     echo "Clonging PARTS LLVM..."
     git clone --depth 1 -b "$TAG" https://github.com/pointer-authentication/PARTS-llvm.git "$REPODIR"
 
-    echo "Clonging Clang..."
-    cd "$REPODIR"
-    git clone --depth 1 -b release_60 https://github.com/llvm-mirror/clang.git "$REPODIR"/tools/clang --depth 1
-
     echo "Compiling LLVM + PACStack..."
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
     cmake -G Ninja \
         -DCMAKE_INSTALL_PREFIX="$LLVM_INSTALL"  \
-        -DCMAKE_BUILD_TYPE=Release              \
-        -DBUILD_SHARED_LIBS=Off                 \
+        -DCMAKE_BUILD_TYPE=Debug                \
+        -DBUILD_SHARED_LIBS=On                  \
         -DLLVM_TARGETS_TO_BUILD=AArch64         \
-        -DLLVM_BUILD_TOOLS=Off                  \
+        -DLLVM_BUILD_TOOLS=On                   \
         -DLLVM_BUILD_TESTS=Off                  \
         -DLLVM_BUILD_EXAMPLES=Off               \
         -DLLVM_BUILD_DOCS=Off                   \
@@ -88,7 +84,8 @@ compiler() {
         -DLLVM_ENABLE_LTO=Off                   \
         -DLLVM_ENABLE_DOXYGEN=Off               \
         -DLLVM_ENABLE_RTTI=Off                  \
-        "$REPODIR"
+        -DLLVM_ENABLE_PROJECTS="clang"          \
+        "$REPODIR/llvm"
     ninja
 }
 
