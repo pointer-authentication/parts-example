@@ -169,14 +169,6 @@ GCC_FLAGS += -g
 
 GCC_LINKER_OPTIONS += -static
 
-ifeq ($(USE_PAUTH), yes)
-	ifeq ($(USE_DUMMY), yes)
-		PAUTH_LIB := PARTSlib-dummy.o
-	else
-		PAUTH_LIB := PARTSlib.o
-	endif
-endif
-
 # GCC flags for direct .c->bin, with or without PA
 GCC_UNSAFE := ${GCC_FLAGS}
 GCC_UNSAFE += -fno-stack-protector
@@ -217,10 +209,7 @@ ${BIN:=.linked.opt.bc}: %.linked.opt.bc : %.linked.bc
 $(BIN:=.s): %.s : %.linked.opt.bc
 	$(LLC) $(LLC_FLAGS) $< -o $@
 
-$(PAUTH_LIB): %.o : $(mkfile_dir)PARTSlib//%.c
-	$(GCC) -c $^ $(AUTH_CFLAGS) -o $@
-
-$(BIN): % : %.s $(PAUTH_LIB)
+$(BIN): % : %.s
 	$(GCC) $(GCC_FLAGS) $(LDFLAGS) $^ -o $@ ${GCC_LINKER_OPTIONS}
 
 dis: $(BIN:=.linked.ll) $(BIN:=.linked.opt.ll)
