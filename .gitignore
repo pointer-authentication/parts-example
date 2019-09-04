@@ -1,3 +1,4 @@
+PARTS-llvm
 Makefile.local
 gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu.tar.xz
 gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu/

@@ -8,7 +8,7 @@ mkfile_dir := $(dir $(mkfile_path))
 -include $(mkfile_dir)Makefile.local
 
 ################################################################
-# path configuration, these can be overriden in Makefile.local #
+# instrumenation configuration, overriden in Makefile.local    #
 ################################################################
 USE_PAUTH ?= yes
 USE_BECFI ?= yes
@@ -16,6 +16,9 @@ USE_FECFI ?= yes
 USE_DPI ?= yes
 USE_DUMMY ?= no
 O_LEVEL ?= 0
+################################################################
+# path configuration, these can be overriden in Makefile.local #
+################################################################
 # The Linaro gcc installation to use
 LINARO_GCC 	?= $(mkfile_dir)gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu
 # The Linaro sysroot to use
@@ -23,6 +26,9 @@ SYSROOT 	?= $(mkfile_dir)sysroot-glibc-linaro-2.25-2018.05-aarch64-linux-gnu
 # The LLVM installation or build directory to use
 LLVM 		?= $(mkfile_dir)parts-build
 
+#################################################
+# The below paths should not need to be changed #
+#################################################
 # Locate some binaryies
 LLVM_LINKER 	:= ${LLVM}/bin/llvm-link
 LLVM_DIS 		:= ${LLVM}/bin/llvm-dis
@@ -32,213 +38,71 @@ CLANG 			:= ${LLVM}/bin/clang
 CLANGPP 		:= ${LLVM}/bin/clang++
 LLC 			:= ${LLVM}/bin/llc
 GCC 			:= ${LINARO_GCC}/bin/aarch64-linux-gnu-gcc
-# GPP_AARCH		:= /usr/aarch64-linux-gnu
-# OBJDUMP 		:= ${LINARO_GCC}/bin/aarch64-linux-gnu-objdump
 
-# LINKER_SCRIPT = ${LINKER_SCRIPT_DIR}/arch/arm64/pauth_linker_script_pie_with_pauth_section.lds
-# PATH_AUTH_INCLUDE = ${LINKER_SCRIPT_DIR}/arch/arm64/include
-
-# BIN_VERIFY_BECFI = $(mkfile_dir)check_becfi.pl
-
-
-# Flags for clang
-#################
-C_FLAGS += -target aarch64
-# C_FLAGS += -I${LINARO_WORKSPACE}/tools/gcc/gcc-linaro-6.2.1-2016.11-x86_64_aarch64-linux-gnu/aarch64-linux-gnu/libc/usr/include
-C_FLAGS += -I$(SYSROOT)/usr/include
-# C_FLAGS += -I$(PATH_AUTH_INCLUDE)
-ifneq ($(NO_DEBUG_SYMBOLS), yes)
-	C_FLAGS += -g
-endif
-C_FLAGS += -Wall
-C_FLAGS += -Wextra
-C_FLAGS += -fPIC
-C_FLAGS += -fvisibility=hidden
-C_FLAGS += -O$(O_LEVEL)
-C_FLAGS += --sysroot=$(SYSROOT)
-C_FLAGS += -DPAUTH_ARMV8_3_A
-# C_FLAGS += -march=armv8.3-a
-
-CPP_FLAGS := ${C_FLAGS} -stdlib=libc++
-CPP_FLAGS += -I$(GPP_AARCH)/include/c++/7
-CPP_FLAGS += -I$(GPP_AARCH)/include/c++/7/aarch64-linux-gnu
-CPP_FLAGS += -L$(GPP_AARCH)/lib
-CPP_FLAGS += -O$(O_LEVEL)
-CPP_FLAGS += -Wl,-rpath,$(GPP_AARCH)/lib
-
-# Flags for building the pauth_section thingy
-AUTH_CFLAGS = -I$(PATH_AUTH_INCLUDE)
-AUTH_CFLAGS += -fPIC # -fPIC: we need *.o to be Position Independent Code.
-AUTH_CFLAGS += -fvisibility=hidden
-AUTH_CFLAGS += -DPAUTH_ARMV8_3_A
-AUTH_CFLAGS += -march=armv8.3-a
-AUTH_CFLAGS += --sysroot=$(SYSROOT)
-AUTH_CFLAGS += -g
-ifeq ($(USE_RUNTIME_STATS), yes)
-	AUTH_CFLAGS += -DPARTS_DUMP_STATS
-endif
-
-# Flags for LLVM opt
-####################
-OPT_FLAGS += -load $(LLVM)/lib/PartsOpt.so
-OPT_FLAGS += -O$(O_LEVEL)
+# Flags for compiling directly with Clang
+CFLAGS += -O$(O_LEVEL)
+CFLAGS += --target=aarch64-linux-gnu
+CFLAGS += -march=armv8.3-a
+CFLAGS += -I$(SYSROOT)/usr/include
+CFLAGS += -B$(LINARO_GCC)
+CFLAGS += -Wall
+CFLAGS += -Wextra
+CFLAGS += -fPIC
+CFLAGS += -fvisibility=hidden
+CFLAGS += --sysroot=$(SYSROOT)
+CFLAGS += -DPAUTH_ARMV8_3_A
+CFLAGS += -fno-stack-protector
+CFLAGS += -D_FORTIFY_SOURCE=0
+CFLAGS += $(PARTS_CFLAGS)
+CFLAGS += -static
 
 ifeq ($(USE_PAUTH), yes)
 ifeq ($(USE_BECFI), yes)
-	OPT_FLAGS += -parts-becfi
-	OPT_FLAGS += -parts-opt-ras
+	CFLAGS += -mllvm -parts-becfi=full
+	LLC_FLAGS += -parts-becfi=ng-full
 endif
-
 ifeq ($(USE_FECFI), yes)
-	# required to "enable" fecfi
+	CFLAGS += -mllvm -parts-cpi=full
 	OPT_FLAGS += -parts-fecfi
-	# required to actually run the pass
 	OPT_FLAGS += -parts-opt-cpi
+	LLC_FLAGS += -parts-fecfi
 	NEED_GLOBALS_FIX = yes
 endif
-
 ifeq ($(USE_DPI), yes)
-	# required to "enable" dpi
+	CFLAGS += -mllvm -parts-dpp=full
 	OPT_FLAGS += -parts-dpi
-	# required to run the dpi pass
 	OPT_FLAGS += -parts-opt-dpi
-	# required to PAC args to main (char **argv)
 	OPT_FLAGS += -parts-opt-mainargs
-	# enable type punning support by default
 	OPT_FLAGS += -parts-dpi-union-type-punning
+	LLC_FLAGS += -parts-dpi
 	NEED_GLOBALS_FIX = yes
 endif
-
-ifeq ($(USE_DUMMY), yes)
-	OPT_FLAGS += -parts-dummy
-endif
-ifeq ($(USE_RUNTIME_STATS), yes)
-	OPT_FLAGS += -parts-stats
-endif
-
 ifeq ($(NEED_GLOBALS_FIX), yes)
 	OPT_FLAGS += -parts-opt-globals
 endif
-
-endif # /$USE_PAUTH
-
-# Flags for LLVM linker
-#######################
-LINKER_FLAGS := # $(shell ${LLVM_CONFIG} --ldflags)
-LINKER_CPP_FLAGS := $(LINKER_FLAGS)
-
-# Flags for LLVM static linker
-##############################
-LLC_FLAGS += -march=aarch64 -mattr=v8.3a
-LLC_FLAGS += -O=$(O_LEVEL)
-
-ifeq ($(USE_PAUTH), yes)
-ifeq ($(USE_BECFI), yes)
-	LLC_FLAGS += -parts-becfi=full
 endif
-ifeq ($(USE_FECFI), yes)
-	LLC_FLAGS += -parts-fecfi
-endif
-ifeq ($(USE_DPI), yes)
-	LLC_FLAGS += -parts-dpi
-endif
-ifeq ($(USE_DUMMY), yes)
-	LLC_FLAGS += -parts-dummy
-endif
-ifeq ($(USE_RUNTIME_STATS), yes)
-	LLC_FLAGS += -parts-stats
-endif
-endif
-
-# Flags for GCC assembler
-#########################
-LDFLAGS = -fPIE
-LDFLAGS += -pie # -pie: Final executable has to be a Position Independent Executable.
-LDFLAGS += -znorelro # znorelro Disable RELRO support from linker, so we are able to write into the relocatable entries (or data.rel.ro)
-LDFLAGS += -fvisibility=hidden
-LDFLAGS += --sysroot=$(SYSROOT)
-# ifeq ($(USE_PAUTH), yes)
-# 	LDFLAGS += -T $(LINKER_SCRIPT)
-# endif
-
-LDFLAGS_CPP := $(LDFLAGS)
-LDFLAGS_CPP += -L$(GPP_AARCH)/lib
-
-GCC_FLAGS += -march=armv8.3-a
-GCC_FLAGS += -g
-
-GCC_LINKER_OPTIONS += -static
-
-# GCC flags for direct .c->bin, with or without PA
-GCC_UNSAFE := ${GCC_FLAGS}
-GCC_UNSAFE += -fno-stack-protector
-GCC_UNSAFE += -D_FORTIFY_SOURCE=0
-
-#######################################
-# Default generated values and target "
-#######################################
-
-BIN ?= $(shell basename $(shell pwd)).out
 
 SOURCES ?= $(wildcard *.c)
+BIN ?= $(shell basename $(shell pwd)).out
 
-default_all: ${BIN}
+$(BIN): $(SOURCES)
+	${CLANG} ${CFLAGS} $^ -o $@
 
-######################################
-# Helper/common targets for Makefile #
-######################################
+${SOURCES:.c=.ll}: %.ll : %.c
+	${CLANG} ${C_FLAGS} -S -emit-llvm -c $<
 
-auth%.o: $(LINKER_SCRIPT_DIR)/auth%.c
-	$(GCC) -c $^ $(AUTH_CFLAGS) -o $@
+${BIN:=.linked.ll}: ${SOURCES:.c=.ll}
+	${LLVM_LINKER} ${LINKER_FLAGS} -S $^ -o $@
 
-######################################
-# Helper/common targets for Makefile #
-######################################
+${BIN:=.linked.opt.ll}: %.linked.opt.ll : %.linked.ll
+	${LLVM_OPT} ${OPT_FLAGS} -S < $< > $@
 
-print-%: ; @echo $* = $($*)
-
-${SOURCES:.c=.bc}: %.bc : %.c
-	${CLANG} ${C_FLAGS} -emit-llvm -c $<
-
-${BIN:=.linked.bc}: ${SOURCES:.c=.bc}
-	${LLVM_LINKER} ${LINKER_FLAGS} $^ -o $@
-
-${BIN:=.linked.opt.bc}: %.linked.opt.bc : %.linked.bc
-	${LLVM_OPT} ${OPT_FLAGS} < $< > $@
-
-$(BIN:=.s): %.s : %.linked.opt.bc
+$(BIN:=.s): %.s : %.linked.opt.ll
 	$(LLC) $(LLC_FLAGS) $< -o $@
 
-$(BIN): % : %.s
-	$(GCC) $(GCC_FLAGS) $(LDFLAGS) $^ -o $@ ${GCC_LINKER_OPTIONS}
-
+.PHONY: dis
 dis: $(BIN:=.linked.ll) $(BIN:=.linked.opt.ll)
-
-${BIN:=.linked.ll}: %.ll : ${SOURCES:.c=bc}
-	$(LLVM_DIS) $^
-
-${BIN:=.linked.opt.ll}: %.ll : %.bc
-	$(LLVM_DIS) $^
-
-.PHONY: check_directories
-check_directories: check_linaro_gcc check_linaro_sysroot check_llvm
-
-.PHONY: check_linaro_gcc
-check_linaro_gcc:
-	@ls -l $(LINARO_GCC) > /dev/null || (echo -n "\ncannot find ${LINARO_GCC}\nset LINARO_GCC to fix\n\n" && false)
-
-.PHONY: check_linaro_sysroot
-check_linaro_sysroot:
-	@ls -l $(SYSROOT) > /dev/null || (echo -n "\ncannot find ${SYSROOT}\nset SYSROOT to fix\n\n" && false)
-
-.PHONY: check_llvm
-check_llvm_installation:
-	@ls -l $(LLVM) > /dev/null || (echo -n "\ncannot find ${LLVM}\nset LLVM to fix\n\n" && false)
 
 .PHONY: clean
 clean::
-	rm -rf ${CLEAN_FILES} *.bc *.o *.s ${BIN} *.linked_bc *.ll *.dump a.out
-
-.PHONY: mrproper
-mrproper:: clean
-	rm -rf ${MRPROPER_FILES}
+	rm -rf $(CLEAN_FILES) *.bc *.o *.s $(BIN) $(BIN) *.linked_bc *.ll *.dump a.out
